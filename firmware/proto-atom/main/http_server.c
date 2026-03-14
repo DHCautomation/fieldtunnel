@@ -1,0 +1,313 @@
+#include <string.h>
+#include <stdio.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "esp_http_server.h"
+#include "esp_spiffs.h"
+#include "esp_log.h"
+#include "esp_system.h"
+#include "esp_timer.h"
+#include "cJSON.h"
+#include "gateway.h"
+
+static const char *TAG = "http";
+
+/* ───────────────────── File serving ───────────────────── */
+
+static esp_err_t send_file(httpd_req_t *req, const char *path, const char *mime)
+{
+    char fp[48];
+    snprintf(fp, sizeof(fp), "/spiffs%s", path);
+    FILE *f = fopen(fp, "r");
+    if (!f) { httpd_resp_send_404(req); return ESP_FAIL; }
+    httpd_resp_set_type(req, mime);
+    char buf[512];
+    size_t n;
+    while ((n = fread(buf, 1, sizeof(buf), f)) > 0)
+        httpd_resp_send_chunk(req, buf, n);
+    fclose(f);
+    httpd_resp_send_chunk(req, NULL, 0);
+    return ESP_OK;
+}
+
+static esp_err_t h_root(httpd_req_t *r) { return send_file(r, "/index.html", "text/html"); }
+static esp_err_t h_css(httpd_req_t *r)  { return send_file(r, "/style.css",  "text/css"); }
+static esp_err_t h_js(httpd_req_t *r)   { return send_file(r, "/app.js",     "application/javascript"); }
+
+/* ───────────────────── GET /api/status ───────────────────── */
+
+static esp_err_t api_status(httpd_req_t *req)
+{
+    int64_t up = (esp_timer_get_time() - gw.boot_time) / 1000000;
+    GW_LOCK();
+    char json[512];
+    snprintf(json, sizeof(json),
+        "{\"wifiConnected\":%s,\"apMode\":%s,\"ip\":\"%s\","
+        "\"port\":%u,\"baud\":%lu,\"dataBits\":%u,\"parity\":%u,\"stopBits\":%u,"
+        "\"rtuTimeout\":%u,\"lastError\":\"%s\","
+        "\"tx\":%lu,\"rx\":%lu,\"err\":%lu,\"uptime\":%lld,"
+        "\"mac\":\"%s\",\"fw\":\"%s\"}",
+        gw.wifi_connected ? "true" : "false",
+        gw.ap_mode ? "true" : "false",
+        gw.ip_addr,
+        gw.tcp_port, (unsigned long)gw.baud,
+        gw.data_bits, gw.parity, gw.stop_bits,
+        gw.rtu_timeout, gw.last_error,
+        (unsigned long)gw.tx_count, (unsigned long)gw.rx_count,
+        (unsigned long)gw.err_count, (long long)up,
+        gw.mac_addr, FW_VERSION);
+    GW_UNLOCK();
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, json);
+    return ESP_OK;
+}
+
+/* ───────────────────── GET /api/config ───────────────────── */
+
+static esp_err_t api_config(httpd_req_t *req)
+{
+    GW_LOCK();
+    char json[384];
+    snprintf(json, sizeof(json),
+        "{\"ssid\":\"%s\",\"baud\":%lu,\"dataBits\":%u,"
+        "\"parity\":%u,\"stopBits\":%u,\"rtuTimeout\":%u,\"tcpPort\":%u}",
+        gw.wifi_ssid, (unsigned long)gw.baud,
+        gw.data_bits, gw.parity, gw.stop_bits,
+        gw.rtu_timeout, gw.tcp_port);
+    GW_UNLOCK();
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, json);
+    return ESP_OK;
+}
+
+/* ───────────────────── POST /api/wifi ───────────────────── */
+
+static esp_err_t api_wifi(httpd_req_t *req)
+{
+    char buf[256];
+    int len = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (len <= 0) return ESP_FAIL;
+    buf[len] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad json"); return ESP_FAIL; }
+
+    cJSON *s = cJSON_GetObjectItem(root, "ssid");
+    cJSON *p = cJSON_GetObjectItem(root, "pass");
+    GW_LOCK();
+    if (cJSON_IsString(s)) { memset(gw.wifi_ssid, 0, sizeof(gw.wifi_ssid)); strncpy(gw.wifi_ssid, s->valuestring, sizeof(gw.wifi_ssid)-1); }
+    if (cJSON_IsString(p)) { memset(gw.wifi_pass, 0, sizeof(gw.wifi_pass)); strncpy(gw.wifi_pass, p->valuestring, sizeof(gw.wifi_pass)-1); }
+    GW_UNLOCK();
+    gw_save_config();
+    cJSON_Delete(root);
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"ok\":true}");
+    vTaskDelay(pdMS_TO_TICKS(500));
+    esp_restart();
+    return ESP_OK;
+}
+
+/* ───────────────────── POST /api/rs485 ───────────────────── */
+
+static esp_err_t api_rs485(httpd_req_t *req)
+{
+    char buf[256];
+    int len = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (len <= 0) return ESP_FAIL;
+    buf[len] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad json"); return ESP_FAIL; }
+
+    cJSON *j;
+    GW_LOCK();
+    if ((j = cJSON_GetObjectItem(root, "baud"))       && cJSON_IsNumber(j)) gw.baud        = j->valueint;
+    if ((j = cJSON_GetObjectItem(root, "dataBits"))   && cJSON_IsNumber(j)) gw.data_bits   = j->valueint;
+    if ((j = cJSON_GetObjectItem(root, "parity"))     && cJSON_IsNumber(j)) gw.parity      = j->valueint;
+    if ((j = cJSON_GetObjectItem(root, "stopBits"))   && cJSON_IsNumber(j)) gw.stop_bits   = j->valueint;
+    if ((j = cJSON_GetObjectItem(root, "rtuTimeout")) && cJSON_IsNumber(j)) gw.rtu_timeout = j->valueint;
+    if ((j = cJSON_GetObjectItem(root, "tcpPort"))    && cJSON_IsNumber(j)) gw.tcp_port    = j->valueint;
+    GW_UNLOCK();
+    gw_save_config();
+    rs485_reconfigure();
+    cJSON_Delete(root);
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"ok\":true}");
+    return ESP_OK;
+}
+
+/* ───────────────────── POST /api/test ───────────────────── */
+
+static esp_err_t api_test(httpd_req_t *req)
+{
+    char buf[256];
+    int len = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (len <= 0) return ESP_FAIL;
+    buf[len] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad json"); return ESP_FAIL; }
+
+    cJSON *jS = cJSON_GetObjectItem(root, "slaveId");
+    cJSON *jF = cJSON_GetObjectItem(root, "fc");
+    cJSON *jA = cJSON_GetObjectItem(root, "addr");
+    cJSON *jC = cJSON_GetObjectItem(root, "count");
+    if (!jS || !jF || !jA || !jC) {
+        cJSON_Delete(root);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing fields");
+        return ESP_FAIL;
+    }
+
+    uint8_t  slave = jS->valueint;
+    uint8_t  fc    = jF->valueint;
+    uint16_t addr  = jA->valueint;
+    uint16_t count = jC->valueint;
+    cJSON_Delete(root);
+
+    /* Build PDU */
+    uint8_t pdu[5];
+    pdu[0] = fc;
+    pdu[1] = addr >> 8;
+    pdu[2] = addr & 0xFF;
+    uint16_t val = count;
+    if (fc == 5) val = count ? 0xFF00 : 0x0000;
+    pdu[3] = val >> 8;
+    pdu[4] = val & 0xFF;
+
+    rtu_txn_t txn;
+    txn.unit_id = slave;
+    memcpy(txn.pdu, pdu, 5);
+    txn.pdu_len = 5;
+
+    bool ok = rs485_transact(&txn);
+
+    /* Build response */
+    cJSON *resp = cJSON_CreateObject();
+    cJSON_AddBoolToObject(resp, "ok", ok);
+
+    /* TX hex */
+    char hex[MAX_ADU * 3 + 1];
+    int p = 0;
+    p += snprintf(hex + p, sizeof(hex) - p, "%02X", slave);
+    for (int i = 0; i < 5; i++)
+        p += snprintf(hex + p, sizeof(hex) - p, " %02X", pdu[i]);
+    cJSON_AddStringToObject(resp, "txHex", hex);
+    cJSON_AddNumberToObject(resp, "startAddr", addr);
+
+    if (ok && txn.resp_len > 0) {
+        p = 0;
+        for (int i = 0; i < txn.resp_len; i++)
+            p += snprintf(hex + p, sizeof(hex) - p, "%s%02X", i ? " " : "", txn.resp[i]);
+        cJSON_AddStringToObject(resp, "rxHex", hex);
+
+        /* Decode values */
+        cJSON *vals = cJSON_CreateArray();
+        uint8_t *rd = txn.resp + 1;   /* skip unit_id in response */
+        uint8_t rfc = rd[0];
+
+        if ((rfc == 3 || rfc == 4) && txn.resp_len > 3) {
+            uint8_t bc = rd[1];
+            for (int i = 0; i < bc / 2; i++) {
+                uint16_t v = (rd[2 + i * 2] << 8) | rd[2 + i * 2 + 1];
+                cJSON_AddItemToArray(vals, cJSON_CreateNumber(v));
+            }
+        } else if ((rfc == 1 || rfc == 2) && txn.resp_len > 3) {
+            uint8_t bc = rd[1];
+            for (int i = 0; i < bc * 8 && i < count; i++) {
+                int bit = (rd[2 + i / 8] >> (i % 8)) & 1;
+                cJSON_AddItemToArray(vals, cJSON_CreateNumber(bit));
+            }
+        } else if (rfc == 5 || rfc == 6) {
+            uint16_t wv = (rd[3] << 8) | rd[4];
+            cJSON_AddItemToArray(vals, cJSON_CreateNumber(wv));
+        }
+        cJSON_AddItemToObject(resp, "values", vals);
+    } else {
+        cJSON_AddStringToObject(resp, "rxHex", "");
+        cJSON_AddItemToObject(resp, "values", cJSON_CreateArray());
+        GW_LOCK();
+        cJSON_AddStringToObject(resp, "error", gw.last_error);
+        GW_UNLOCK();
+    }
+
+    char *json = cJSON_PrintUnformatted(resp);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, json);
+    free(json);
+    cJSON_Delete(resp);
+    return ESP_OK;
+}
+
+/* ───────────────────── POST /api/reboot ───────────────────── */
+
+static esp_err_t api_reboot(httpd_req_t *req)
+{
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"ok\":true}");
+    vTaskDelay(pdMS_TO_TICKS(500));
+    esp_restart();
+    return ESP_OK;
+}
+
+/* ───────────────────── POST /api/resetstats ───────────────────── */
+
+static esp_err_t api_resetstats(httpd_req_t *req)
+{
+    gw.tx_count  = 0;
+    gw.rx_count  = 0;
+    gw.err_count = 0;
+    gw.boot_time = esp_timer_get_time();
+    GW_LOCK(); gw.last_error[0] = '\0'; GW_UNLOCK();
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"ok\":true}");
+    return ESP_OK;
+}
+
+/* ───────────────────── Server start ───────────────────── */
+
+void http_server_task(void *arg)
+{
+    while (!gw.wifi_connected && !gw.ap_mode)
+        vTaskDelay(pdMS_TO_TICKS(500));
+
+    /* SPIFFS */
+    esp_vfs_spiffs_conf_t sc = {
+        .base_path = "/spiffs",
+        .partition_label = "storage",
+        .max_files = 5,
+        .format_if_mount_failed = true,
+    };
+    ESP_ERROR_CHECK(esp_vfs_spiffs_register(&sc));
+
+    /* HTTP server */
+    httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
+    cfg.max_uri_handlers = 16;
+    cfg.stack_size = 8192;
+    httpd_handle_t srv = NULL;
+    if (httpd_start(&srv, &cfg) != ESP_OK) {
+        ESP_LOGE(TAG, "httpd_start failed");
+        vTaskDelete(NULL);
+        return;
+    }
+
+    const httpd_uri_t uris[] = {
+        { "/",               HTTP_GET,  h_root,         NULL },
+        { "/index.html",     HTTP_GET,  h_root,         NULL },
+        { "/style.css",      HTTP_GET,  h_css,          NULL },
+        { "/app.js",         HTTP_GET,  h_js,           NULL },
+        { "/api/status",     HTTP_GET,  api_status,     NULL },
+        { "/api/config",     HTTP_GET,  api_config,     NULL },
+        { "/api/wifi",       HTTP_POST, api_wifi,       NULL },
+        { "/api/rs485",      HTTP_POST, api_rs485,      NULL },
+        { "/api/test",       HTTP_POST, api_test,       NULL },
+        { "/api/reboot",     HTTP_POST, api_reboot,     NULL },
+        { "/api/resetstats", HTTP_POST, api_resetstats, NULL },
+    };
+    for (int i = 0; i < sizeof(uris) / sizeof(uris[0]); i++)
+        httpd_register_uri_handler(srv, &uris[i]);
+
+    ESP_LOGI(TAG, "HTTP server on port 80");
+    while (1) { vTaskDelay(pdMS_TO_TICKS(60000)); }
+}

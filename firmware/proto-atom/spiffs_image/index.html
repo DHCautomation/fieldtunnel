@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FieldTunnel</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sb-logo">[field<span>tunnel</span>]</div>
+  <nav class="sb-nav">
+    <a href="#" data-page="dashboard" class="active"><span class="nav-dot"></span>Dashboard</a>
+    <a href="#" data-page="rs485"><span class="nav-dot"></span>RS485 Config</a>
+    <a href="#" data-page="wifi"><span class="nav-dot"></span>WiFi</a>
+    <a href="#" data-page="test"><span class="nav-dot"></span>Test Console</a>
+    <a href="#" data-page="about"><span class="nav-dot"></span>About</a>
+  </nav>
+  <div class="sb-footer">
+    <span class="pulse-dot" id="pulse"></span>
+    <span id="sb-status">Not Connected</span>
+    <span id="sb-ip" class="sb-ip">--</span>
+  </div>
+</aside>
+
+<main>
+
+  <!-- ════ Dashboard ════ -->
+  <div id="page-dashboard" class="page active">
+    <h2>Dashboard</h2>
+    <div class="card">
+      <h3>Connection</h3>
+      <div class="kv"><span>Mode</span><span id="d-mode">--</span></div>
+      <div class="kv"><span>IP Address</span><span id="d-ip">--</span></div>
+      <div class="kv"><span>TCP Port</span><span id="d-port">--</span></div>
+      <div class="kv"><span>RS485</span><span id="d-frame">--</span></div>
+      <div class="kv"><span>Last Error</span><span id="d-err" class="err-text">--</span></div>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-val" id="d-tx">0</div><div class="stat-lbl">TX &rarr; RTU</div></div>
+      <div class="stat-card"><div class="stat-val" id="d-rx">0</div><div class="stat-lbl">RX &larr; RTU</div></div>
+      <div class="stat-card"><div class="stat-val" id="d-errs">0</div><div class="stat-lbl">Errors</div></div>
+      <div class="stat-card"><div class="stat-val" id="d-up">0s</div><div class="stat-lbl">Uptime</div></div>
+    </div>
+    <button class="btn-ghost" onclick="resetStats()">Reset Counters</button>
+  </div>
+
+  <!-- ════ RS485 Config ════ -->
+  <div id="page-rs485" class="page">
+    <h2>RS485 Configuration</h2>
+    <div class="card">
+      <h3>Serial Settings</h3>
+      <div class="form-row">
+        <div class="form-group"><label>Baud Rate</label>
+          <select id="cfg-baud"><option>9600</option><option selected>19200</option><option>38400</option><option>57600</option><option>115200</option></select></div>
+        <div class="form-group"><label>Data Bits</label>
+          <select id="cfg-dbits"><option value="7">7</option><option value="8" selected>8</option></select></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Parity</label>
+          <select id="cfg-par"><option value="0">None</option><option value="1">Odd</option><option value="2">Even</option></select></div>
+        <div class="form-group"><label>Stop Bits</label>
+          <select id="cfg-stop"><option value="1">1</option><option value="2">2</option></select></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>RTU Timeout (ms)</label>
+          <input id="cfg-tmo" type="number" value="500" min="50" max="10000"></div>
+        <div class="form-group"><label>TCP Port</label>
+          <input id="cfg-port" type="number" value="502" min="1" max="65535"></div>
+      </div>
+      <button onclick="saveRS485()">Apply</button>
+    </div>
+  </div>
+
+  <!-- ════ WiFi ════ -->
+  <div id="page-wifi" class="page">
+    <h2>WiFi Configuration</h2>
+    <div class="card">
+      <h3>Station Mode</h3>
+      <div class="form-group"><label>SSID</label><input id="wifi-ssid" type="text"></div>
+      <div class="form-group"><label>Password</label><input id="wifi-pass" type="password"></div>
+      <button onclick="saveWifi()">Save &amp; Reconnect</button>
+      <p class="hint">Device will reboot and attempt to connect. Falls back to AP mode if connection fails.</p>
+    </div>
+  </div>
+
+  <!-- ════ Test Console ════ -->
+  <div id="page-test" class="page">
+    <h2>Test Console</h2>
+    <div class="card">
+      <h3>Modbus Request</h3>
+      <div class="form-row">
+        <div class="form-group"><label>Slave ID</label>
+          <input id="t-slave" type="number" value="1" min="1" max="247"></div>
+        <div class="form-group"><label>Function Code</label>
+          <select id="t-fc">
+            <option value="1">01 Read Coils</option>
+            <option value="2">02 Read Discrete Inputs</option>
+            <option value="3" selected>03 Read Holding Registers</option>
+            <option value="4">04 Read Input Registers</option>
+            <option value="5">05 Write Single Coil</option>
+            <option value="6">06 Write Single Register</option>
+          </select></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Start Address</label>
+          <input id="t-addr" type="number" value="0" min="0" max="65535"></div>
+        <div class="form-group"><label>Count / Value</label>
+          <input id="t-count" type="number" value="1" min="0" max="65535"></div>
+      </div>
+      <button onclick="sendTest()">Send</button>
+    </div>
+    <div class="card console-card">
+      <h3>Output</h3>
+      <pre id="t-out" class="console">Ready.</pre>
+    </div>
+  </div>
+
+  <!-- ════ About ════ -->
+  <div id="page-about" class="page">
+    <h2>About</h2>
+    <div class="card">
+      <h3>Device Information</h3>
+      <div class="kv"><span>Firmware</span><span id="a-fw">--</span></div>
+      <div class="kv"><span>Hardware</span><span>ESP32-PICO-D4 (ATOM Echo)</span></div>
+      <div class="kv"><span>RS485</span><span>Tail485 / SP485EEN-L</span></div>
+      <div class="kv"><span>MAC Address</span><span id="a-mac">--</span></div>
+    </div>
+    <div class="card">
+      <h3>Actions</h3>
+      <button class="btn-danger" onclick="reboot()">Reboot Device</button>
+    </div>
+  </div>
+
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>
