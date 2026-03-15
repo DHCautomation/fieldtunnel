@@ -1,3 +1,7 @@
+# WARNING: fullclean wipes partition table and sdkconfig
+# Only use this when changing sdkconfig or partition table
+# After this flash, Device 2 will need USB reflash before OTA works again
+
 Remove-Item env:MSYSTEM -ErrorAction SilentlyContinue
 Remove-Item env:MINGW_PREFIX -ErrorAction SilentlyContinue
 Remove-Item env:MSYSTEM_PREFIX -ErrorAction SilentlyContinue
@@ -12,5 +16,7 @@ $env:IDF_PYTHON_ENV_PATH = "C:\Users\admin\.espressif\python_env\idf5.5_py3.11_e
 
 & "$env:IDF_PATH\export.ps1" 2>$null
 Set-Location "C:\dev\fieldtunnel\firmware\proto-atom"
+idf.py fullclean
+idf.py set-target esp32
 idf.py build
 idf.py -p COM4 -b 115200 flash

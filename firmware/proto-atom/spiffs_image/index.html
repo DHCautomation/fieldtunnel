@@ -76,11 +76,11 @@
           <div class="mode-desc">Transparent byte pipe &middot; Temco etc</div>
           <span class="mode-badge live">&bullet; Live</span>
         </div>
-        <div class="mode-card disabled" data-mode="2">
+        <div class="mode-card" data-mode="2" onclick="selectMode(2)">
 
           <div class="mode-name">BACnet MS/TP</div>
           <div class="mode-desc">BACnet IP &harr; MS/TP router</div>
-          <span class="mode-badge soon">&cir; Coming Soon</span>
+          <span class="mode-badge live">&bullet; Live</span>
         </div>
         <div class="mode-card disabled" data-mode="3">
 
@@ -113,6 +113,19 @@
           <input id="cfg-port" type="number" value="502" min="1" max="65535"></div>
       </div>
       <button onclick="saveRS485()">Apply</button>
+    </div>
+
+    <div class="card" id="bacnet-settings" style="display:none">
+      <h3>BACnet MS/TP Settings</h3>
+      <div class="form-row">
+        <div class="form-group"><label>MS/TP MAC (1-127)</label>
+          <input id="cfg-bmac" type="number" value="5" min="1" max="127"></div>
+        <div class="form-group"><label>Max Master (1-127)</label>
+          <input id="cfg-bmax" type="number" value="127" min="1" max="127"></div>
+      </div>
+      <div class="form-group"><label>BACnet/IP Port</label>
+        <input id="cfg-bport" type="number" value="47808" min="1" max="65535"></div>
+      <button onclick="saveBACnet()">Apply BACnet Settings</button>
     </div>
   </div>
 

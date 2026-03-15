@@ -104,6 +104,8 @@ function setActiveMode(m) {
     document.querySelectorAll('.mode-card').forEach(function(c) {
         c.classList.toggle('active', parseInt(c.dataset.mode) === m);
     });
+    var bs = document.getElementById('bacnet-settings');
+    if (bs) bs.style.display = (m === 2) ? 'block' : 'none';
 }
 
 function updateModeStatus(m, port, baud, db, par, sb) {
@@ -135,6 +137,30 @@ function selectMode(m) {
             poll();
         }
     }).catch(function(e) { alert('Error: ' + e); setActiveMode(currentMode); });
+}
+
+/* ── BACnet config ── */
+function loadBACnet() {
+    fetch('/api/bacnet').then(function(r) { return r.json(); }).then(function(d) {
+        document.getElementById('cfg-bmac').value = d.mac;
+        document.getElementById('cfg-bmax').value = d.maxMaster;
+        document.getElementById('cfg-bport').value = d.port;
+    }).catch(function() {});
+}
+
+function saveBACnet() {
+    var body = {
+        mac: parseInt(document.getElementById('cfg-bmac').value),
+        maxMaster: parseInt(document.getElementById('cfg-bmax').value),
+        port: parseInt(document.getElementById('cfg-bport').value)
+    };
+    fetch('/api/bacnet', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
+    }).then(function(r) { return r.json(); }).then(function(d) {
+        if (d.ok) alert('BACnet settings applied.');
+    }).catch(function(e) { alert('Error: ' + e); });
 }
 
 /* ── RS485 config ── */
@@ -423,4 +449,5 @@ function reboot() {
 /* ── Init ── */
 poll();
 loadConfig();
+loadBACnet();
 setInterval(poll, 2000);

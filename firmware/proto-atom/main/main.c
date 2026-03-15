@@ -36,6 +36,9 @@ void gw_load_config(void)
     if (nvs_get_u16(h, "tmo",  &u16) == ESP_OK) gw.rtu_timeout = u16;
     if (nvs_get_u16(h, "port", &u16) == ESP_OK) gw.tcp_port    = u16;
     if (nvs_get_u8(h, "mode",  &u8) == ESP_OK) gw.mode       = u8;
+    if (nvs_get_u8(h, "bmac", &u8) == ESP_OK) gw.bacnet_mac = u8;
+    if (nvs_get_u8(h, "bmax", &u8) == ESP_OK) gw.bacnet_max_master = u8;
+    if (nvs_get_u16(h, "bport", &u16) == ESP_OK) gw.bacnet_port = u16;
     nvs_close(h);
 }
 
@@ -52,6 +55,9 @@ void gw_save_config(void)
     nvs_set_u16(h, "tmo",   gw.rtu_timeout);
     nvs_set_u16(h, "port",  gw.tcp_port);
     nvs_set_u8(h,  "mode",  gw.mode);
+    nvs_set_u8(h,  "bmac", gw.bacnet_mac);
+    nvs_set_u8(h,  "bmax", gw.bacnet_max_master);
+    nvs_set_u16(h, "bport", gw.bacnet_port);
     nvs_commit(h);
     nvs_close(h);
 }
@@ -81,6 +87,9 @@ void app_main(void)
     gw.rtu_timeout = DEFAULT_RTU_TMO;
     gw.tcp_port    = DEFAULT_TCP_PORT;
     gw.mode        = 0;
+    gw.bacnet_mac  = 5;
+    gw.bacnet_max_master = 127;
+    gw.bacnet_port = 47808;
 
     gw_load_config();
 
@@ -117,4 +126,5 @@ void app_main(void)
     xTaskCreate(rs485_task,       "rs485",    4096, NULL, 6, NULL);
     xTaskCreate(tcp_server_task,  "tcp_srv",  4096, NULL, 5, NULL);
     xTaskCreate(http_server_task, "http_srv", 12288, NULL, 4, NULL);
+    xTaskCreate(bacnet_task,      "bacnet",   8192, NULL, 7, NULL);
 }

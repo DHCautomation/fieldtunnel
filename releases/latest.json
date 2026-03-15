@@ -1,7 +1,7 @@
 {
-  "version": "0.2.1",
+  "version": "0.3.0",
   "releaseDate": "2026-03-14",
-  "notes": "Live update check from fieldtunnel.com",
+  "notes": "BACnet MS/TP gateway mode",
   "minVersion": "0.2.0",
-  "url": "https://fieldtunnel.com/releases/fieldtunnel-0.2.1.bin"
+  "url": "https://fieldtunnel.com/releases/fieldtunnel-0.3.0.bin"
 }

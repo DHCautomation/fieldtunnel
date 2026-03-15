@@ -19,7 +19,7 @@
 #define DEFAULT_RTU_TMO    500        /* ms */
 #define DEFAULT_TCP_PORT   502
 #define AP_PASS            "fieldtunnel123"
-#define FW_VERSION         "0.2.1"
+#define FW_VERSION         "0.3.0"
 #define AP_IP              "192.168.4.1"
 
 /* ── Sizes ── */
@@ -50,7 +50,11 @@ typedef struct {
     uint8_t  stop_bits;
     uint16_t rtu_timeout;
     uint16_t tcp_port;
-    uint8_t  mode;         /* 0=Modbus TCP GW  1=Raw Tunnel */
+    uint8_t  mode;         /* 0=Modbus TCP GW  1=Raw Tunnel  2=BACnet MS/TP */
+
+    uint8_t  bacnet_mac;        /* MS/TP MAC address (1-127), default 5 */
+    uint8_t  bacnet_max_master; /* max master (1-127), default 127 */
+    uint16_t bacnet_port;       /* BACnet/IP UDP port, default 47808 */
 
     uint32_t tx_count;
     uint32_t rx_count;
@@ -74,6 +78,7 @@ void wifi_task(void *arg);
 void rs485_task(void *arg);
 void tcp_server_task(void *arg);
 void http_server_task(void *arg);
+void bacnet_task(void *arg);
 
 /* ── RS485 transaction ── */
 typedef struct {

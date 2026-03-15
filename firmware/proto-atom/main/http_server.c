@@ -488,6 +488,43 @@ static esp_err_t api_ota_fetch(httpd_req_t *req)
     return ESP_OK;
 }
 
+/* ───────────────────── GET/POST /api/bacnet ───────────────────── */
+
+static esp_err_t api_bacnet_get(httpd_req_t *req)
+{
+    char json[128];
+    snprintf(json, sizeof(json),
+        "{\"mac\":%u,\"maxMaster\":%u,\"port\":%u}",
+        gw.bacnet_mac, gw.bacnet_max_master, gw.bacnet_port);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, json);
+    return ESP_OK;
+}
+
+static esp_err_t api_bacnet_post(httpd_req_t *req)
+{
+    char buf[128];
+    int len = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (len <= 0) return ESP_FAIL;
+    buf[len] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad json"); return ESP_FAIL; }
+
+    cJSON *j;
+    GW_LOCK();
+    if ((j = cJSON_GetObjectItem(root, "mac"))       && cJSON_IsNumber(j)) gw.bacnet_mac        = j->valueint;
+    if ((j = cJSON_GetObjectItem(root, "maxMaster")) && cJSON_IsNumber(j)) gw.bacnet_max_master = j->valueint;
+    if ((j = cJSON_GetObjectItem(root, "port"))      && cJSON_IsNumber(j)) gw.bacnet_port       = j->valueint;
+    GW_UNLOCK();
+    gw_save_config();
+    cJSON_Delete(root);
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"ok\":true}");
+    return ESP_OK;
+}
+
 /* ───────────────────── POST /api/reboot ───────────────────── */
 
 static esp_err_t api_reboot(httpd_req_t *req)
@@ -557,6 +594,8 @@ void http_server_task(void *arg)
         { "/api/ota/upload", HTTP_POST, api_ota_upload, NULL },
         { "/api/ota/check",  HTTP_GET,  api_ota_check,  NULL },
         { "/api/ota/fetch",  HTTP_POST, api_ota_fetch,  NULL },
+        { "/api/bacnet",     HTTP_GET,  api_bacnet_get, NULL },
+        { "/api/bacnet",     HTTP_POST, api_bacnet_post,NULL },
     };
     for (int i = 0; i < sizeof(uris) / sizeof(uris[0]); i++)
         httpd_register_uri_handler(srv, &uris[i]);
