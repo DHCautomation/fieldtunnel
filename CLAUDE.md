@@ -79,12 +79,76 @@ If auto-release failed, run manually:
 - http_server_task: Port 80, REST API + SPIFFS
 - bacnet_task:      UDP 47808 + MS/TP, mode==2 only
 
+## Current Firmware State (v0.3.3)
+- Modbus TCP Gateway: working
+- Raw TCP Tunnel: working
+- BACnet MS/TP: UART stack working (needs real device test)
+- SunSpec Solar: coming soon
+- Context-aware UI per protocol: working
+- Mode switch confirmation dialog: working
+- Unsaved changes warning: working
+- BACnet extended settings: working
+  (Device ID, Network, Slot/Reply/Usage timeouts, Retry, Name)
+- Modbus extended settings: working
+  (Max TCP Clients, RTU Retry)
+- NAT bridge + dynamic DNS: working
+- OTA firmware updates: working
+- Auto-release pipeline: working
+  flash.ps1 -> bin + latest.json + index.html -> git push
+- Check for Updates -> one-click Update Now: working
+
+## Device Status
+Device 1 (F91C): 192.168.10.125, USB COM4, v0.3.3
+Device 2 (3C40): 192.168.10.130, 12V WiFi, v0.3.2
+  -> OTA Device 2 to v0.3.3 tomorrow
+
 ## Pending Work
-- [ ] Temco RS485 test (IDs 21+22, temp+RH)
+- [ ] OTA Device 2 to v0.3.3
+- [ ] Temco RS485 test
+      Device 2 wired to Temco IDs 21+22 via Tail485
+      Test 1: Raw TCP Tunnel mode
+        Open Temco software
+        Point at 192.168.10.130:502
+        Connect device ID 21 and 22
+        Try firmware update through gateway
+      Test 2: Modbus TCP mode
+        Open CAS Scanner
+        Point at 192.168.10.130:502
+        Scan IDs 21 and 22
+        Read all registers
+        Screenshot + note register map
+        This completes v0.4.0
 - [ ] BACnet MS/TP real device test
+- [ ] Device discovery page (scan bus for slave IDs)
 - [ ] SunSpec solar auto-discovery
-- [ ] Device discovery page (scan bus for IDs)
-- [ ] BACnet device template library
+- [ ] Compatible devices section on main website
+- [ ] PCB design (separate chat in progress)
+      KiCad schematic + layout
+      JLCPCB SMT target <$80 CAD/5 boards
+      Air W1 (WiFi) + Pro E1 (WiFi+ETH) from one PCB
+      Hammond or 3D print PC-ABS enclosure
+
+## Tomorrow Session Start
+Paste this at start of Claude Code session:
+
+"Read CLAUDE.md first.
+ Device 1 (F91C) on USB COM4 running v0.3.3.
+ Device 2 (3C40) at 192.168.10.130 running v0.3.2.
+
+ Step 1: OTA Device 2 to v0.3.3
+   Open 192.168.10.130 -> Firmware -> Check for Updates
+   Hit Update Now
+   Confirm v0.3.3 after reboot
+
+ Step 2: Temco RS485 test
+   Switch Device 2 to Raw TCP Tunnel mode
+   Connect Temco software to 192.168.10.130:502
+   Test device IDs 21 and 22
+   Then switch to Modbus TCP
+   CAS Scanner -> scan -> read registers
+   Report register map
+
+ This is v0.4.0 milestone."
 
 ## ESP-IDF Version
 v5.5.1 at C:\Users\admin\esp\v5.5.1\esp-idf
