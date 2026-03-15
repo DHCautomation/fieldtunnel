@@ -24,5 +24,14 @@ if ($ver) {
     Copy-Item $bin $dest -Force
     $json = "{`n  `"version`": `"$ver`",`n  `"releaseDate`": `"$(Get-Date -Format 'yyyy-MM-dd')`",`n  `"notes`": `"Latest release`",`n  `"minVersion`": `"0.2.0`",`n  `"url`": `"https://fieldtunnel.com/releases/fieldtunnel-$ver.bin`"`n}"
     $json | Out-File "..\..\releases\latest.json" -Encoding UTF8 -NoNewline
+    # Update releases/index.html version references
+    $htmlPath = "..\..\releases\index.html"
+    if (Test-Path $htmlPath) {
+        $html = Get-Content $htmlPath -Raw
+        $html = $html -replace 'fieldtunnel-[\d.]+\.bin', "fieldtunnel-$ver.bin"
+        $html = $html -replace '(?<=version-big">v)[\d.]+', $ver
+        $html | Set-Content $htmlPath -NoNewline
+        Write-Host "Updated releases/index.html to v$ver"
+    }
     Write-Host "Auto-released v$ver to releases/"
 }
