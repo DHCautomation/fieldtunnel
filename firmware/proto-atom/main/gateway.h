@@ -19,7 +19,13 @@
 #define DEFAULT_RTU_TMO    500        /* ms */
 #define DEFAULT_TCP_PORT   502
 #define AP_PASS            "fieldtunnel123"
-#define FW_VERSION         "0.3.0"
+#define FW_VERSION         "0.3.1"
+
+/* ── BACnet vendor ── */
+#define BACNET_VENDOR_ID    1234
+#define BACNET_DEVICE_ID    1234
+#define BACNET_VENDOR_NAME  "DHC Automation and Controls Ltd"
+#define BACNET_MODEL_NAME   "FieldTunnel Air W1"
 #define AP_IP              "192.168.4.1"
 
 /* ── Sizes ── */

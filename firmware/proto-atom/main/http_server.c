@@ -390,15 +390,19 @@ static esp_err_t api_ota_check(httpd_req_t *req)
         .timeout_ms = 5000,
         .crt_bundle_attach = esp_crt_bundle_attach,
     };
+    ESP_LOGI(TAG, "OTA check: fetching %s", cfg.url);
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
 
     char buf[512] = {0};
     esp_err_t err = esp_http_client_open(client, 0);
     if (err == ESP_OK) {
-        esp_http_client_fetch_headers(client);
+        int content_len = esp_http_client_fetch_headers(client);
+        int status = esp_http_client_get_status_code(client);
+        ESP_LOGI(TAG, "OTA check: http status=%d content_len=%d", status, content_len);
         int len = esp_http_client_read(client, buf, sizeof(buf) - 1);
         if (len > 0) {
             buf[len] = '\0';
+            ESP_LOGI(TAG, "OTA check: response=%s", buf);
             cJSON *j = cJSON_Parse(buf);
             if (j) {
                 cJSON *v = cJSON_GetObjectItem(j, "version");
@@ -410,12 +414,16 @@ static esp_err_t api_ota_check(httpd_req_t *req)
                 cJSON_Delete(j);
                 fetch_ok = true;
             }
+        } else {
+            ESP_LOGW(TAG, "OTA check: read returned %d", len);
         }
     } else {
-        ESP_LOGW(TAG, "OTA check fetch failed: %s", esp_err_to_name(err));
+        ESP_LOGW(TAG, "OTA check: fetch failed: %s", esp_err_to_name(err));
     }
     esp_http_client_close(client);
     esp_http_client_cleanup(client);
+    ESP_LOGI(TAG, "OTA check: remote=%s current=%s fetch_ok=%d",
+             remote_version, FW_VERSION, fetch_ok);
 
     bool update_available = fetch_ok && strcmp(remote_version, FW_VERSION) != 0;
 

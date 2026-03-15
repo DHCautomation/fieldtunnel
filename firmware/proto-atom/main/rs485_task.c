@@ -64,7 +64,12 @@ void rs485_task(void *arg)
 
     rtu_txn_t *txn;
     while (1) {
-        if (xQueueReceive(rtu_queue, &txn, portMAX_DELAY) != pdTRUE)
+        /* Yield UART to BACnet task when in BACnet mode */
+        if (gw.mode == 2) {
+            vTaskDelay(pdMS_TO_TICKS(500));
+            continue;
+        }
+        if (xQueueReceive(rtu_queue, &txn, pdMS_TO_TICKS(100)) != pdTRUE)
             continue;
 
         /* ── Build RTU frame ── */
