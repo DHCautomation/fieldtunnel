@@ -1,6 +1,11 @@
-/* ── FieldTunnel Web UI v0.2.0 ── */
+/* ── FieldTunnel Web UI v0.3.3 ── */
 
 var cfgLoaded = false;
+var dirty = false;
+
+document.addEventListener('change', function(e) {
+    if (e.target.matches('input, select')) dirty = true;
+});
 
 /* ── Navigation ── */
 document.querySelectorAll('.sb-nav a').forEach(function(a) {
@@ -104,16 +109,18 @@ function setActiveMode(m) {
     document.querySelectorAll('.mode-card').forEach(function(c) {
         c.classList.toggle('active', parseInt(c.dataset.mode) === m);
     });
-    /* Show/hide context-aware settings */
     var bs = document.getElementById('bacnet-settings');
     var se = document.getElementById('serial-extras');
     var bh = document.getElementById('baud-hint');
+    var me = document.getElementById('modbus-extras');
     if (m === 2) {
         if (se) se.style.display = 'none';
+        if (me) me.style.display = 'none';
         if (bs) bs.style.display = 'block';
         if (bh) bh.style.display = 'block';
     } else {
         if (se) se.style.display = 'block';
+        if (me) me.style.display = (m === 0) ? 'flex' : 'none';
         if (bs) bs.style.display = 'none';
         if (bh) bh.style.display = 'none';
     }
@@ -136,6 +143,9 @@ function updateModeStatus(m, port, baud, db, par, sb) {
 
 function selectMode(m) {
     if (m === currentMode) return;
+    if (dirty && !confirm('You have unsaved changes. Switch mode anyway?')) return;
+    if (!confirm('Switch to ' + MODE_NAMES[m] + '?\n\nActive connections will be dropped.\nDevice will apply new mode immediately.')) return;
+    dirty = false;
     setActiveMode(m);
     var body = {
         baud: parseInt(document.getElementById('cfg-baud').value),
@@ -165,6 +175,13 @@ function loadBACnet() {
         document.getElementById('cfg-bmac').value = d.mac;
         document.getElementById('cfg-bmax').value = d.maxMaster;
         document.getElementById('cfg-bport').value = d.port;
+        document.getElementById('cfg-bdev').value = d.deviceId;
+        document.getElementById('cfg-bnet').value = d.network;
+        document.getElementById('cfg-bslot').value = d.slotTime;
+        document.getElementById('cfg-breply').value = d.replyTimeout;
+        document.getElementById('cfg-busage').value = d.usageTimeout;
+        document.getElementById('cfg-bretry').value = d.retry;
+        document.getElementById('cfg-bdname').value = d.deviceName || '';
     }).catch(function() {});
 }
 
@@ -172,14 +189,21 @@ function saveBACnet() {
     var body = {
         mac: parseInt(document.getElementById('cfg-bmac').value),
         maxMaster: parseInt(document.getElementById('cfg-bmax').value),
-        port: parseInt(document.getElementById('cfg-bport').value)
+        port: parseInt(document.getElementById('cfg-bport').value),
+        deviceId: parseInt(document.getElementById('cfg-bdev').value),
+        network: parseInt(document.getElementById('cfg-bnet').value),
+        slotTime: parseInt(document.getElementById('cfg-bslot').value),
+        replyTimeout: parseInt(document.getElementById('cfg-breply').value),
+        usageTimeout: parseInt(document.getElementById('cfg-busage').value),
+        retry: parseInt(document.getElementById('cfg-bretry').value),
+        deviceName: document.getElementById('cfg-bdname').value
     };
     fetch('/api/bacnet', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(body)
     }).then(function(r) { return r.json(); }).then(function(d) {
-        if (d.ok) alert('BACnet settings applied.');
+        if (d.ok) { dirty = false; alert('BACnet settings applied.'); }
     }).catch(function(e) { alert('Error: ' + e); });
 }
 
@@ -202,6 +226,7 @@ function saveRS485() {
         if (d.ok) {
             updateModeStatus(currentMode, body.tcpPort, body.baud,
                 body.dataBits, body.parity, body.stopBits);
+            dirty = false;
             alert('RS485 settings applied.');
         }
     }).catch(function(e) { alert('Error: ' + e); });

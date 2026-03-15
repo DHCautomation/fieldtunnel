@@ -500,10 +500,18 @@ static esp_err_t api_ota_fetch(httpd_req_t *req)
 
 static esp_err_t api_bacnet_get(httpd_req_t *req)
 {
-    char json[128];
+    GW_LOCK();
+    char json[384];
     snprintf(json, sizeof(json),
-        "{\"mac\":%u,\"maxMaster\":%u,\"port\":%u}",
-        gw.bacnet_mac, gw.bacnet_max_master, gw.bacnet_port);
+        "{\"mac\":%u,\"maxMaster\":%u,\"port\":%u,"
+        "\"deviceId\":%lu,\"network\":%u,\"slotTime\":%u,"
+        "\"replyTimeout\":%u,\"usageTimeout\":%u,\"retry\":%u,"
+        "\"deviceName\":\"%s\"}",
+        gw.bacnet_mac, gw.bacnet_max_master, gw.bacnet_port,
+        (unsigned long)gw.bacnet_device_id, gw.bacnet_network,
+        gw.bacnet_slot_time, gw.bacnet_reply_tmo,
+        gw.bacnet_usage_tmo, gw.bacnet_retry, gw.bacnet_name);
+    GW_UNLOCK();
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, json);
     return ESP_OK;
@@ -511,7 +519,7 @@ static esp_err_t api_bacnet_get(httpd_req_t *req)
 
 static esp_err_t api_bacnet_post(httpd_req_t *req)
 {
-    char buf[128];
+    char buf[384];
     int len = httpd_req_recv(req, buf, sizeof(buf) - 1);
     if (len <= 0) return ESP_FAIL;
     buf[len] = '\0';
@@ -521,9 +529,16 @@ static esp_err_t api_bacnet_post(httpd_req_t *req)
 
     cJSON *j;
     GW_LOCK();
-    if ((j = cJSON_GetObjectItem(root, "mac"))       && cJSON_IsNumber(j)) gw.bacnet_mac        = j->valueint;
-    if ((j = cJSON_GetObjectItem(root, "maxMaster")) && cJSON_IsNumber(j)) gw.bacnet_max_master = j->valueint;
-    if ((j = cJSON_GetObjectItem(root, "port"))      && cJSON_IsNumber(j)) gw.bacnet_port       = j->valueint;
+    if ((j = cJSON_GetObjectItem(root, "mac"))          && cJSON_IsNumber(j)) gw.bacnet_mac        = j->valueint;
+    if ((j = cJSON_GetObjectItem(root, "maxMaster"))    && cJSON_IsNumber(j)) gw.bacnet_max_master = j->valueint;
+    if ((j = cJSON_GetObjectItem(root, "port"))         && cJSON_IsNumber(j)) gw.bacnet_port       = j->valueint;
+    if ((j = cJSON_GetObjectItem(root, "deviceId"))     && cJSON_IsNumber(j)) gw.bacnet_device_id  = j->valueint;
+    if ((j = cJSON_GetObjectItem(root, "network"))      && cJSON_IsNumber(j)) gw.bacnet_network    = j->valueint;
+    if ((j = cJSON_GetObjectItem(root, "slotTime"))     && cJSON_IsNumber(j)) gw.bacnet_slot_time  = j->valueint;
+    if ((j = cJSON_GetObjectItem(root, "replyTimeout")) && cJSON_IsNumber(j)) gw.bacnet_reply_tmo  = j->valueint;
+    if ((j = cJSON_GetObjectItem(root, "usageTimeout")) && cJSON_IsNumber(j)) gw.bacnet_usage_tmo  = j->valueint;
+    if ((j = cJSON_GetObjectItem(root, "retry"))        && cJSON_IsNumber(j)) gw.bacnet_retry      = j->valueint;
+    if ((j = cJSON_GetObjectItem(root, "deviceName"))   && cJSON_IsString(j)) { memset(gw.bacnet_name, 0, 33); strncpy(gw.bacnet_name, j->valuestring, 32); }
     GW_UNLOCK();
     gw_save_config();
     cJSON_Delete(root);

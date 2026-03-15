@@ -19,7 +19,7 @@
 #define DEFAULT_RTU_TMO    500        /* ms */
 #define DEFAULT_TCP_PORT   502
 #define AP_PASS            "fieldtunnel123"
-#define FW_VERSION         "0.3.2"
+#define FW_VERSION         "0.3.3"
 
 /* ── BACnet vendor ── */
 #define BACNET_VENDOR_ID    1234
@@ -61,6 +61,16 @@ typedef struct {
     uint8_t  bacnet_mac;        /* MS/TP MAC address (1-127), default 5 */
     uint8_t  bacnet_max_master; /* max master (1-127), default 127 */
     uint16_t bacnet_port;       /* BACnet/IP UDP port, default 47808 */
+    uint32_t bacnet_device_id;  /* BACnet device instance */
+    uint16_t bacnet_network;    /* BACnet network number */
+    uint16_t bacnet_slot_time;  /* ms between frames */
+    uint16_t bacnet_reply_tmo;  /* reply timeout ms */
+    uint16_t bacnet_usage_tmo;  /* token hold time ms */
+    uint8_t  bacnet_retry;      /* retry count */
+    char     bacnet_name[33];   /* device name */
+
+    uint8_t  max_connections;   /* max TCP clients */
+    uint8_t  rtu_retry;         /* RTU retry count */
 
     uint32_t tx_count;
     uint32_t rx_count;

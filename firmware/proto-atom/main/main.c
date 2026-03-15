@@ -39,6 +39,16 @@ void gw_load_config(void)
     if (nvs_get_u8(h, "bmac", &u8) == ESP_OK) gw.bacnet_mac = u8;
     if (nvs_get_u8(h, "bmax", &u8) == ESP_OK) gw.bacnet_max_master = u8;
     if (nvs_get_u16(h, "bport", &u16) == ESP_OK) gw.bacnet_port = u16;
+    uint32_t u32;
+    if (nvs_get_u32(h, "bdevid", &u32) == ESP_OK) gw.bacnet_device_id = u32;
+    if (nvs_get_u16(h, "bnet", &u16) == ESP_OK) gw.bacnet_network = u16;
+    if (nvs_get_u16(h, "bslot", &u16) == ESP_OK) gw.bacnet_slot_time = u16;
+    if (nvs_get_u16(h, "breply", &u16) == ESP_OK) gw.bacnet_reply_tmo = u16;
+    if (nvs_get_u16(h, "busage", &u16) == ESP_OK) gw.bacnet_usage_tmo = u16;
+    if (nvs_get_u8(h, "bretry", &u8) == ESP_OK) gw.bacnet_retry = u8;
+    len = sizeof(gw.bacnet_name); nvs_get_str(h, "bname", gw.bacnet_name, &len);
+    if (nvs_get_u8(h, "maxconn", &u8) == ESP_OK) gw.max_connections = u8;
+    if (nvs_get_u8(h, "rturet", &u8) == ESP_OK) gw.rtu_retry = u8;
     nvs_close(h);
 }
 
@@ -58,6 +68,15 @@ void gw_save_config(void)
     nvs_set_u8(h,  "bmac", gw.bacnet_mac);
     nvs_set_u8(h,  "bmax", gw.bacnet_max_master);
     nvs_set_u16(h, "bport", gw.bacnet_port);
+    nvs_set_u32(h, "bdevid", gw.bacnet_device_id);
+    nvs_set_u16(h, "bnet", gw.bacnet_network);
+    nvs_set_u16(h, "bslot", gw.bacnet_slot_time);
+    nvs_set_u16(h, "breply", gw.bacnet_reply_tmo);
+    nvs_set_u16(h, "busage", gw.bacnet_usage_tmo);
+    nvs_set_u8(h, "bretry", gw.bacnet_retry);
+    nvs_set_str(h, "bname", gw.bacnet_name);
+    nvs_set_u8(h, "maxconn", gw.max_connections);
+    nvs_set_u8(h, "rturet", gw.rtu_retry);
     nvs_commit(h);
     nvs_close(h);
 }
@@ -90,6 +109,15 @@ void app_main(void)
     gw.bacnet_mac  = 5;
     gw.bacnet_max_master = 127;
     gw.bacnet_port = 47808;
+    gw.bacnet_device_id = BACNET_DEVICE_ID;
+    gw.bacnet_network = 0;
+    gw.bacnet_slot_time = 10;
+    gw.bacnet_reply_tmo = 255;
+    gw.bacnet_usage_tmo = 50;
+    gw.bacnet_retry = 3;
+    strncpy(gw.bacnet_name, BACNET_MODEL_NAME, 32);
+    gw.max_connections = 4;
+    gw.rtu_retry = 2;
 
     gw_load_config();
 
