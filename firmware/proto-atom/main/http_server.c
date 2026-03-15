@@ -386,7 +386,7 @@ static esp_err_t api_ota_check(httpd_req_t *req)
     bool fetch_ok = false;
 
     esp_http_client_config_t cfg = {
-        .url = "https://fieldtunnel.com/firmware/latest.json",
+        .url = "https://fieldtunnel.com/releases/latest.json",
         .timeout_ms = 5000,
         .crt_bundle_attach = esp_crt_bundle_attach,
     };

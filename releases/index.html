@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FieldTunnel Firmware — Download &amp; Update</title>
+<meta name="description" content="Download the latest FieldTunnel firmware. Free OTA updates for all devices.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#080c10;--card:#0d1117;--teal:#00d4b8;--teal-dim:rgba(0,212,184,.12);--text:#c9d1d9;--muted:#8b949e;--border:#1e2d3d;--white:#f0f6fc}
+html{scroll-behavior:smooth}
+body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;overflow-x:hidden}
+
+body::before{content:'';position:fixed;inset:0;background:
+  linear-gradient(rgba(0,212,184,.025) 1px,transparent 1px),
+  linear-gradient(90deg,rgba(0,212,184,.025) 1px,transparent 1px);
+  background-size:44px 44px;pointer-events:none;z-index:0}
+body::after{content:'';position:fixed;top:-200px;left:50%;transform:translateX(-50%);
+  width:800px;height:600px;background:radial-gradient(ellipse,rgba(0,212,184,.06),transparent 70%);
+  pointer-events:none;z-index:0}
+
+nav{position:sticky;top:0;z-index:100;background:rgba(8,12,16,.92);backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;height:56px}
+.nav-inner{max-width:1120px;margin:0 auto;width:100%;display:flex;align-items:center;justify-content:space-between}
+.logo{font-family:'Space Mono',monospace;font-weight:700;font-size:1.15rem;color:var(--white);text-decoration:none;letter-spacing:-.5px}
+.logo span{color:var(--teal)}
+.badge{font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--teal);border:1px solid var(--teal);border-radius:3px;padding:2px 6px;margin-left:10px;vertical-align:middle}
+.nav-links{display:flex;gap:24px;list-style:none}
+.nav-links a{color:var(--muted);text-decoration:none;font-size:.88rem;font-weight:500;transition:color .2s}
+.nav-links a:hover{color:var(--teal)}
+.nav-links a.active{color:var(--teal)}
+
+section{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:60px 24px}
+.section-label{font-family:'Space Mono',monospace;font-size:.75rem;color:var(--teal);text-transform:uppercase;letter-spacing:.15em;margin-bottom:12px}
+h2{font-family:'Space Mono',monospace;font-size:1.6rem;color:var(--white);margin-bottom:8px;letter-spacing:-.5px}
+.subtitle{color:var(--muted);font-size:1rem;margin-bottom:4px}
+.location{font-family:'Space Mono',monospace;font-size:.75rem;color:var(--muted)}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:24px;margin-bottom:20px}
+.card h3{font-family:'Space Mono',monospace;font-size:.75rem;text-transform:uppercase;letter-spacing:.1em;color:var(--teal);margin-bottom:14px}
+.card.featured{border-top:3px solid var(--teal)}
+
+.version-big{font-family:'Space Mono',monospace;font-size:2.2rem;font-weight:700;color:var(--teal);margin-bottom:4px}
+.release-date{font-family:'Space Mono',monospace;font-size:.78rem;color:var(--muted);margin-bottom:12px}
+.release-notes{font-size:.92rem;color:var(--text);margin-bottom:12px}
+.compat{font-size:.82rem;color:var(--muted);margin-bottom:20px;font-style:italic}
+
+.btn-download{display:inline-block;background:var(--teal);color:var(--bg);padding:14px 32px;
+  border-radius:6px;font-weight:700;font-size:1rem;text-decoration:none;transition:all .2s}
+.btn-download:hover{background:#00f0d0;box-shadow:0 0 24px rgba(0,212,184,.3)}
+.file-meta{font-family:'Space Mono',monospace;font-size:.72rem;color:var(--muted);margin-top:12px}
+.sha{font-family:'Space Mono',monospace;font-size:.65rem;color:#4a6b8a;word-break:break-all;margin-top:6px}
+
+.step{display:flex;gap:16px;padding:14px 0;border-bottom:1px solid rgba(30,45,61,.4)}
+.step:last-child{border-bottom:none}
+.step-num{font-family:'Space Mono',monospace;font-weight:700;color:var(--teal);
+  width:28px;height:28px;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  border:1px solid var(--teal);border-radius:50%;font-size:.78rem}
+.step-text{font-size:.88rem}
+.step-text strong{color:var(--white)}
+.step-text code{font-family:'Space Mono',monospace;font-size:.78rem;color:var(--teal);
+  background:rgba(0,212,184,.08);padding:2px 6px;border-radius:3px}
+
+.auto-note{border-left:3px solid var(--teal);padding:16px 20px;background:rgba(0,212,184,.04);
+  border-radius:0 6px 6px 0;margin-bottom:20px}
+.auto-note p{font-size:.88rem;margin-bottom:4px}
+.auto-note .badge-inline{font-family:'Space Mono',monospace;font-size:.65rem;color:var(--teal);margin-top:8px}
+
+table{width:100%;border-collapse:collapse;font-size:.82rem}
+th{font-family:'Space Mono',monospace;font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--teal);text-align:left;padding:8px 12px;border-bottom:1px solid var(--border)}
+td{padding:8px 12px;border-bottom:1px solid rgba(30,45,61,.3);color:var(--text)}
+td a{color:var(--teal);text-decoration:none;font-family:'Space Mono',monospace;font-size:.78rem}
+td a:hover{text-decoration:underline}
+
+footer{position:relative;z-index:1;border-top:1px solid var(--border);padding:32px 24px;text-align:center}
+footer .logo{font-size:1rem}
+footer p{font-size:.8rem;color:var(--muted);margin-top:8px}
+
+@media(max-width:640px){
+  section{padding:40px 16px}
+  .version-big{font-size:1.6rem}
+  .step{flex-direction:column;gap:8px}
+}
+</style>
+</head>
+<body>
+
+<nav>
+<div class="nav-inner">
+  <div>
+    <a href="/" class="logo">[<span>fieldtunnel</span>]</a>
+    <span class="badge">BAS Gateway</span>
+  </div>
+  <ul class="nav-links">
+    <li><a href="/">Home</a></li>
+    <li><a href="/releases/" class="active">Releases</a></li>
+  </ul>
+</div>
+</nav>
+
+<!-- ── Hero ── -->
+<section>
+  <div class="section-label">Firmware</div>
+  <h2>FieldTunnel Firmware</h2>
+  <p class="subtitle">Always free. Always open.</p>
+  <p class="location">Ottawa, Canada &middot; DHC Automation</p>
+</section>
+
+<!-- ── Latest Release ── -->
+<section style="padding-top:0">
+  <div class="card featured">
+    <h3>Latest Release</h3>
+    <div class="version-big">v0.2.1</div>
+    <div class="release-date">March 14, 2026</div>
+    <div class="release-notes">NAT bridge with dynamic DNS forwarding, OTA firmware updates via web UI, unique device identity per MAC, live update check from fieldtunnel.com, protocol mode selector.</div>
+    <div class="compat">Compatible with all FieldTunnel Air W1 and Pro E1 devices</div>
+    <a href="fieldtunnel-0.2.1.bin" class="btn-download">&darr; Download fieldtunnel-0.2.1.bin</a>
+    <div class="file-meta">1,094 KB &middot; ESP32 &middot; ESP-IDF v5.5.1</div>
+    <div class="sha">SHA256: a3f7c8d1e9b2f4a6c0d5e8f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1</div>
+  </div>
+
+  <div class="card">
+    <h3>How to Update</h3>
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-text">Connect your phone or laptop to your FieldTunnel device WiFi<br><strong>FieldTunnel-XXXX</strong> &middot; password: <code>fieldtunnel123</code></div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-text">Open the web UI at <code>http://192.168.4.1</code> or <code>http://fieldtunnel-xxxx.local</code></div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-text">Go to <strong>Firmware</strong> in the sidebar</div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-text">Click <strong>Choose File</strong> and select the downloaded <code>.bin</code> file</div>
+    </div>
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-text">Click <strong>Upload Firmware</strong> &mdash; progress bar shows upload status, device reboots automatically (~30 seconds)</div>
+    </div>
+    <div class="step">
+      <div class="step-num">6</div>
+      <div class="step-text">Reconnect to the device and confirm the new version on the <strong>Dashboard</strong></div>
+    </div>
+  </div>
+
+  <div class="auto-note">
+    <p><strong>One-click updates:</strong> Devices with internet access can update automatically from the web UI.</p>
+    <p>Go to <strong>Firmware &rarr; Check for Updates &rarr; Update Now</strong></p>
+    <div class="badge-inline">&bullet; Available in v0.2.1+</div>
+  </div>
+
+  <div class="card">
+    <h3>All Releases</h3>
+    <table>
+      <thead>
+        <tr><th>Version</th><th>Date</th><th>Notes</th><th>Download</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="font-family:'Space Mono',monospace;color:var(--teal)">v0.2.1</td>
+          <td>2026-03-14</td>
+          <td>NAT bridge, OTA, live update check</td>
+          <td><a href="fieldtunnel-0.2.1.bin">.bin</a></td>
+        </tr>
+        <tr>
+          <td style="font-family:'Space Mono',monospace">v0.2.0</td>
+          <td>2026-03-14</td>
+          <td>ESP-IDF baseline, APSTA, mDNS</td>
+          <td style="color:var(--muted)">superseded</td>
+        </tr>
+        <tr>
+          <td style="font-family:'Space Mono',monospace">v0.1.0</td>
+          <td>2026-03-14</td>
+          <td>Arduino proof of concept</td>
+          <td style="color:var(--muted)">archived</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<footer>
+  <a href="/" class="logo">[<span>fieldtunnel</span>]</a>
+  <p>DHC Automation &middot; fieldtunnel.com &middot; 2026</p>
+  <p style="font-family:'Space Mono',monospace;font-size:9px;color:#4a6b8a;margin-top:8px">BACnet&reg; is a registered trademark of ASHRAE. Modbus&reg; is a registered trademark of Schneider Electric. FieldTunnel is compatible with but not endorsed by these trademark holders.</p>
+</footer>
+
+</body>
+</html>
