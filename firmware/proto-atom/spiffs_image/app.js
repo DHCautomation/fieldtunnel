@@ -301,9 +301,14 @@ function checkOTA() {
             return;
         }
         if (d.updateAvailable) {
-            el.innerHTML = 'Update available: <strong>v' + d.available + '</strong>' +
-                '<br><span style="font-size:.7rem">' + d.notes + '</span>' +
-                '<br><a href="' + d.url + '" target="_blank" style="color:var(--teal)">Download</a>';
+            el.innerHTML =
+                '<div class="update-banner">' +
+                '<strong>Update available: v' + d.available + '</strong>' +
+                '<div style="font-size:.75rem;color:var(--muted);margin:6px 0">' + d.notes + '</div>' +
+                '<div style="display:flex;gap:8px;margin-top:10px">' +
+                '<button onclick="otaFetchUpdate(\'' + d.url + '\')">Update Now</button>' +
+                '<button class="btn-ghost" onclick="dismissUpdate()">Later</button>' +
+                '</div></div>';
         } else {
             el.textContent = 'Up to date \u2014 v' + d.current;
             el.style.color = 'var(--teal)';
@@ -312,6 +317,43 @@ function checkOTA() {
         el.textContent = 'Check failed: ' + e;
         el.style.color = 'var(--red)';
     });
+}
+
+function otaFetchUpdate(url) {
+    if (!confirm('Device will reboot after update.\nRS485 bridge will be offline for ~30 seconds.\nContinue?')) return;
+
+    var bar = document.getElementById('ota-bar');
+    var progress = document.getElementById('ota-progress');
+    var status = document.getElementById('ota-status');
+
+    progress.classList.add('active');
+    bar.style.width = '30%';
+    status.textContent = 'Downloading firmware from server\u2026';
+
+    fetch('/api/ota/fetch', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({url: url})
+    }).then(function(r) { return r.json(); }).then(function(d) {
+        if (d.status === 'rebooting') {
+            bar.style.width = '100%';
+            status.textContent = 'Firmware installed \u2014 rebooting\u2026';
+            otaCountdown(15);
+        } else if (d.error) {
+            status.textContent = 'Update failed: ' + d.error;
+            bar.classList.add('error');
+        }
+    }).catch(function() {
+        bar.style.width = '100%';
+        status.textContent = 'Device is rebooting\u2026';
+        otaCountdown(15);
+    });
+}
+
+function dismissUpdate() {
+    var el = document.getElementById('ota-check');
+    el.textContent = 'Reminder set \u2014 will check again on next page load';
+    el.style.color = 'var(--muted)';
 }
 
 /* ── Test console ── */

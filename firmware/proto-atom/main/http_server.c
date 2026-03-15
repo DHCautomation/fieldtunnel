@@ -9,6 +9,7 @@
 #include "esp_timer.h"
 #include "esp_ota_ops.h"
 #include "esp_http_client.h"
+#include "esp_https_ota.h"
 #include "esp_crt_bundle.h"
 #include "cJSON.h"
 #include "esp_wifi.h"
@@ -434,6 +435,59 @@ static esp_err_t api_ota_check(httpd_req_t *req)
     return ESP_OK;
 }
 
+/* ───────────────────── POST /api/ota/fetch ───────────────────── */
+
+static esp_err_t api_ota_fetch(httpd_req_t *req)
+{
+    char buf[384];
+    int len = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (len <= 0) return ESP_FAIL;
+    buf[len] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad json"); return ESP_FAIL; }
+
+    cJSON *u = cJSON_GetObjectItem(root, "url");
+    if (!cJSON_IsString(u)) {
+        cJSON_Delete(root);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing url");
+        return ESP_FAIL;
+    }
+
+    char url[256];
+    strncpy(url, u->valuestring, sizeof(url) - 1);
+    url[sizeof(url) - 1] = '\0';
+    cJSON_Delete(root);
+
+    ESP_LOGI(TAG, "OTA fetch from: %s", url);
+
+    esp_http_client_config_t http_cfg = {
+        .url = url,
+        .timeout_ms = 30000,
+        .crt_bundle_attach = esp_crt_bundle_attach,
+    };
+    esp_https_ota_config_t ota_cfg = {
+        .http_config = &http_cfg,
+    };
+
+    esp_err_t err = esp_https_ota(&ota_cfg);
+
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "OTA fetch success — rebooting");
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, "{\"status\":\"rebooting\"}");
+        vTaskDelay(pdMS_TO_TICKS(500));
+        esp_restart();
+    } else {
+        ESP_LOGE(TAG, "OTA fetch failed: %s", esp_err_to_name(err));
+        char e[128];
+        snprintf(e, sizeof(e), "{\"error\":\"%s\"}", esp_err_to_name(err));
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, e);
+    }
+    return ESP_OK;
+}
+
 /* ───────────────────── POST /api/reboot ───────────────────── */
 
 static esp_err_t api_reboot(httpd_req_t *req)
@@ -502,6 +556,7 @@ void http_server_task(void *arg)
         { "/api/scan",       HTTP_GET,  api_scan,       NULL },
         { "/api/ota/upload", HTTP_POST, api_ota_upload, NULL },
         { "/api/ota/check",  HTTP_GET,  api_ota_check,  NULL },
+        { "/api/ota/fetch",  HTTP_POST, api_ota_fetch,  NULL },
     };
     for (int i = 0; i < sizeof(uris) / sizeof(uris[0]); i++)
         httpd_register_uri_handler(srv, &uris[i]);
