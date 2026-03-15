@@ -8,6 +8,8 @@
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "esp_ota_ops.h"
+#include "esp_http_client.h"
+#include "esp_crt_bundle.h"
 #include "cJSON.h"
 #include "esp_wifi.h"
 #include "gateway.h"
@@ -377,11 +379,56 @@ static esp_err_t api_ota_upload(httpd_req_t *req)
 
 static esp_err_t api_ota_check(httpd_req_t *req)
 {
-    char json[256];
+    char remote_version[16] = {0};
+    char notes[128] = {0};
+    char url[256] = {0};
+    bool fetch_ok = false;
+
+    esp_http_client_config_t cfg = {
+        .url = "https://fieldtunnel.com/firmware/latest.json",
+        .timeout_ms = 5000,
+        .crt_bundle_attach = esp_crt_bundle_attach,
+    };
+    esp_http_client_handle_t client = esp_http_client_init(&cfg);
+
+    char buf[512] = {0};
+    esp_err_t err = esp_http_client_open(client, 0);
+    if (err == ESP_OK) {
+        esp_http_client_fetch_headers(client);
+        int len = esp_http_client_read(client, buf, sizeof(buf) - 1);
+        if (len > 0) {
+            buf[len] = '\0';
+            cJSON *j = cJSON_Parse(buf);
+            if (j) {
+                cJSON *v = cJSON_GetObjectItem(j, "version");
+                cJSON *n = cJSON_GetObjectItem(j, "notes");
+                cJSON *u = cJSON_GetObjectItem(j, "url");
+                if (cJSON_IsString(v)) strncpy(remote_version, v->valuestring, 15);
+                if (cJSON_IsString(n)) strncpy(notes, n->valuestring, 127);
+                if (cJSON_IsString(u)) strncpy(url, u->valuestring, 255);
+                cJSON_Delete(j);
+                fetch_ok = true;
+            }
+        }
+    } else {
+        ESP_LOGW(TAG, "OTA check fetch failed: %s", esp_err_to_name(err));
+    }
+    esp_http_client_close(client);
+    esp_http_client_cleanup(client);
+
+    bool update_available = fetch_ok && strcmp(remote_version, FW_VERSION) != 0;
+
+    char json[512];
     snprintf(json, sizeof(json),
         "{\"current\":\"%s\",\"available\":\"%s\","
-        "\"url\":\"https://fieldtunnel.com/firmware/latest.json\"}",
-        FW_VERSION, FW_VERSION);
+        "\"updateAvailable\":%s,\"notes\":\"%s\","
+        "\"url\":\"%s\",\"checkFailed\":%s}",
+        FW_VERSION,
+        fetch_ok ? remote_version : FW_VERSION,
+        update_available ? "true" : "false",
+        notes, url,
+        fetch_ok ? "false" : "true");
+
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, json);
     return ESP_OK;

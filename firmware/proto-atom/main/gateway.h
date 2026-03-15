@@ -19,7 +19,7 @@
 #define DEFAULT_RTU_TMO    500        /* ms */
 #define DEFAULT_TCP_PORT   502
 #define AP_PASS            "fieldtunnel123"
-#define FW_VERSION         "0.2.0"
+#define FW_VERSION         "0.2.1"
 #define AP_IP              "192.168.4.1"
 
 /* ── Sizes ── */

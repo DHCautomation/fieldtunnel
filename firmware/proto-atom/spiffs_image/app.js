@@ -293,14 +293,24 @@ function otaCountdown(sec) {
 function checkOTA() {
     var el = document.getElementById('ota-check');
     el.textContent = 'Checking\u2026';
+    el.style.color = '';
     fetch('/api/ota/check').then(function(r) { return r.json(); }).then(function(d) {
-        if (d.current === d.available) {
-            el.textContent = 'Up to date \u2014 v' + d.current;
+        if (d.checkFailed) {
+            el.textContent = 'Check failed \u2014 no internet access';
+            el.style.color = 'var(--red)';
+            return;
+        }
+        if (d.updateAvailable) {
+            el.innerHTML = 'Update available: <strong>v' + d.available + '</strong>' +
+                '<br><span style="font-size:.7rem">' + d.notes + '</span>' +
+                '<br><a href="' + d.url + '" target="_blank" style="color:var(--teal)">Download</a>';
         } else {
-            el.textContent = 'Update available: v' + d.available + ' (current: v' + d.current + ')';
+            el.textContent = 'Up to date \u2014 v' + d.current;
+            el.style.color = 'var(--teal)';
         }
     }).catch(function(e) {
         el.textContent = 'Check failed: ' + e;
+        el.style.color = 'var(--red)';
     });
 }
 
