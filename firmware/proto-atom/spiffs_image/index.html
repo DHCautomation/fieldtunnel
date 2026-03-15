@@ -16,6 +16,7 @@
     <a href="#" data-page="rs485"><span class="nav-dot"></span>RS485 Config</a>
     <a href="#" data-page="wifi"><span class="nav-dot"></span>WiFi</a>
     <a href="#" data-page="test"><span class="nav-dot"></span>Test Console</a>
+    <a href="#" data-page="firmware"><span class="nav-dot"></span>Firmware</a>
     <a href="#" data-page="about"><span class="nav-dot"></span>About</a>
   </nav>
   <div class="sb-footer">
@@ -31,10 +32,19 @@
   <div id="page-dashboard" class="page active">
     <h2>Dashboard</h2>
     <div class="card">
+      <h3>Device</h3>
+      <div class="kv"><span>Device ID</span><span id="d-devid">--</span></div>
+      <div class="kv"><span>Hostname</span><span id="d-host">--</span></div>
+      <div class="kv"><span>AP SSID</span><span id="d-apssid">--</span></div>
+    </div>
+    <div class="card">
       <h3>Connection</h3>
       <div class="kv"><span>Mode</span><span id="d-mode">--</span></div>
-      <div class="kv"><span>IP Address</span><span id="d-ip">--</span></div>
+      <div class="kv"><span>AP IP</span><span id="d-apip">--</span></div>
+      <div class="kv"><span>Network IP</span><span id="d-staip">--</span></div>
+      <div class="kv"><span>NAT Bridge</span><span id="d-nat">--</span></div>
       <div class="kv"><span>TCP Port</span><span id="d-port">--</span></div>
+      <div class="kv"><span>Protocol</span><span id="d-proto">--</span></div>
       <div class="kv"><span>RS485</span><span id="d-frame">--</span></div>
       <div class="kv"><span>Last Error</span><span id="d-err" class="err-text">--</span></div>
     </div>
@@ -50,6 +60,38 @@
   <!-- ════ RS485 Config ════ -->
   <div id="page-rs485" class="page">
     <h2>RS485 Configuration</h2>
+
+    <div class="card">
+      <h3>Protocol Mode</h3>
+      <div class="mode-grid" id="mode-grid">
+        <div class="mode-card active" data-mode="0" onclick="selectMode(0)">
+
+          <div class="mode-name">Modbus TCP Gateway</div>
+          <div class="mode-desc">Modbus TCP &harr; RTU &middot; BAS polling</div>
+          <span class="mode-badge live">&bullet; Live</span>
+        </div>
+        <div class="mode-card" data-mode="1" onclick="selectMode(1)">
+
+          <div class="mode-name">Raw TCP Tunnel</div>
+          <div class="mode-desc">Transparent byte pipe &middot; Temco etc</div>
+          <span class="mode-badge live">&bullet; Live</span>
+        </div>
+        <div class="mode-card disabled" data-mode="2">
+
+          <div class="mode-name">BACnet MS/TP</div>
+          <div class="mode-desc">BACnet IP &harr; MS/TP router</div>
+          <span class="mode-badge soon">&cir; Coming Soon</span>
+        </div>
+        <div class="mode-card disabled" data-mode="3">
+
+          <div class="mode-name">SunSpec Solar</div>
+          <div class="mode-desc">Auto-discover SunSpec inverters</div>
+          <span class="mode-badge soon">&cir; Coming Soon</span>
+        </div>
+      </div>
+      <div class="mode-status" id="mode-status">Active: Modbus TCP Gateway &middot; port 502 &middot; 19200 8N1</div>
+    </div>
+
     <div class="card">
       <h3>Serial Settings</h3>
       <div class="form-row">
@@ -79,10 +121,17 @@
     <h2>WiFi Configuration</h2>
     <div class="card">
       <h3>Station Mode</h3>
-      <div class="form-group"><label>SSID</label><input id="wifi-ssid" type="text"></div>
+      <div class="form-group">
+        <label>Scan Networks</label>
+        <div class="scan-row">
+          <select id="wifi-scan" disabled><option value="">-- click Scan --</option></select>
+          <button type="button" class="btn-scan" onclick="scanNetworks()">Scan</button>
+        </div>
+      </div>
+      <div class="form-group"><label>SSID</label><input id="wifi-ssid" type="text" placeholder="Select from scan or type manually"></div>
       <div class="form-group"><label>Password</label><input id="wifi-pass" type="password"></div>
       <button onclick="saveWifi()">Save &amp; Reconnect</button>
-      <p class="hint">Device will reboot and attempt to connect. Falls back to AP mode if connection fails.</p>
+      <p class="hint">Device will reboot and attempt to connect. AP always stays active.</p>
     </div>
   </div>
 
@@ -115,6 +164,35 @@
     <div class="card console-card">
       <h3>Output</h3>
       <pre id="t-out" class="console">Ready.</pre>
+    </div>
+  </div>
+
+  <!-- ════ Firmware ════ -->
+  <div id="page-firmware" class="page">
+    <h2>Firmware</h2>
+    <div class="card">
+      <h3>Device Identity</h3>
+      <div class="kv"><span>Device ID</span><span id="f-devid">--</span></div>
+      <div class="kv"><span>MAC Address</span><span id="f-mac">--</span></div>
+      <div class="kv"><span>Hostname</span><span id="f-host">--</span></div>
+      <div class="kv"><span>Firmware</span><span id="f-fw">--</span></div>
+      <div class="kv"><span>Build</span><span>ESP32 / proto-atom</span></div>
+    </div>
+    <div class="card">
+      <h3>OTA Update</h3>
+      <div class="ota-row">
+        <input type="file" id="ota-file" accept=".bin">
+        <button onclick="uploadFirmware()">Upload Firmware</button>
+      </div>
+      <div class="ota-progress" id="ota-progress">
+        <div class="ota-bar" id="ota-bar"></div>
+      </div>
+      <div class="ota-status" id="ota-status">Select a .bin file to update firmware</div>
+    </div>
+    <div class="card">
+      <h3>Check for Updates</h3>
+      <button class="btn-ghost" onclick="checkOTA()">Check for Updates</button>
+      <div class="ota-check-result" id="ota-check">--</div>
     </div>
   </div>
 

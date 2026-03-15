@@ -7,7 +7,9 @@
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_timer.h"
+#include "esp_ota_ops.h"
 #include "cJSON.h"
+#include "esp_wifi.h"
 #include "gateway.h"
 
 static const char *TAG = "http";
@@ -40,19 +42,25 @@ static esp_err_t api_status(httpd_req_t *req)
 {
     int64_t up = (esp_timer_get_time() - gw.boot_time) / 1000000;
     GW_LOCK();
-    char json[512];
+    char json[768];
     snprintf(json, sizeof(json),
         "{\"wifiConnected\":%s,\"apMode\":%s,\"ip\":\"%s\","
+        "\"staIp\":\"%s\",\"apIp\":\"%s\","
+        "\"deviceId\":\"%s\",\"hostname\":\"%s\",\"apSsid\":\"%s\","
+        "\"natEnabled\":%s,"
         "\"port\":%u,\"baud\":%lu,\"dataBits\":%u,\"parity\":%u,\"stopBits\":%u,"
-        "\"rtuTimeout\":%u,\"lastError\":\"%s\","
+        "\"mode\":%u,\"rtuTimeout\":%u,\"lastError\":\"%s\","
         "\"tx\":%lu,\"rx\":%lu,\"err\":%lu,\"uptime\":%lld,"
         "\"mac\":\"%s\",\"fw\":\"%s\"}",
         gw.wifi_connected ? "true" : "false",
         gw.ap_mode ? "true" : "false",
         gw.ip_addr,
+        gw.sta_ip, AP_IP,
+        gw.device_id, gw.hostname, gw.ap_ssid,
+        gw.nat_enabled ? "true" : "false",
         gw.tcp_port, (unsigned long)gw.baud,
         gw.data_bits, gw.parity, gw.stop_bits,
-        gw.rtu_timeout, gw.last_error,
+        gw.mode, gw.rtu_timeout, gw.last_error,
         (unsigned long)gw.tx_count, (unsigned long)gw.rx_count,
         (unsigned long)gw.err_count, (long long)up,
         gw.mac_addr, FW_VERSION);
@@ -70,10 +78,10 @@ static esp_err_t api_config(httpd_req_t *req)
     char json[384];
     snprintf(json, sizeof(json),
         "{\"ssid\":\"%s\",\"baud\":%lu,\"dataBits\":%u,"
-        "\"parity\":%u,\"stopBits\":%u,\"rtuTimeout\":%u,\"tcpPort\":%u}",
+        "\"parity\":%u,\"stopBits\":%u,\"rtuTimeout\":%u,\"tcpPort\":%u,\"mode\":%u}",
         gw.wifi_ssid, (unsigned long)gw.baud,
         gw.data_bits, gw.parity, gw.stop_bits,
-        gw.rtu_timeout, gw.tcp_port);
+        gw.rtu_timeout, gw.tcp_port, gw.mode);
     GW_UNLOCK();
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, json);
@@ -128,6 +136,7 @@ static esp_err_t api_rs485(httpd_req_t *req)
     if ((j = cJSON_GetObjectItem(root, "stopBits"))   && cJSON_IsNumber(j)) gw.stop_bits   = j->valueint;
     if ((j = cJSON_GetObjectItem(root, "rtuTimeout")) && cJSON_IsNumber(j)) gw.rtu_timeout = j->valueint;
     if ((j = cJSON_GetObjectItem(root, "tcpPort"))    && cJSON_IsNumber(j)) gw.tcp_port    = j->valueint;
+    if ((j = cJSON_GetObjectItem(root, "mode"))       && cJSON_IsNumber(j)) gw.mode        = j->valueint;
     GW_UNLOCK();
     gw_save_config();
     rs485_reconfigure();
@@ -166,7 +175,6 @@ static esp_err_t api_test(httpd_req_t *req)
     uint16_t count = jC->valueint;
     cJSON_Delete(root);
 
-    /* Build PDU */
     uint8_t pdu[5];
     pdu[0] = fc;
     pdu[1] = addr >> 8;
@@ -183,11 +191,9 @@ static esp_err_t api_test(httpd_req_t *req)
 
     bool ok = rs485_transact(&txn);
 
-    /* Build response */
     cJSON *resp = cJSON_CreateObject();
     cJSON_AddBoolToObject(resp, "ok", ok);
 
-    /* TX hex */
     char hex[MAX_ADU * 3 + 1];
     int p = 0;
     p += snprintf(hex + p, sizeof(hex) - p, "%02X", slave);
@@ -202,9 +208,8 @@ static esp_err_t api_test(httpd_req_t *req)
             p += snprintf(hex + p, sizeof(hex) - p, "%s%02X", i ? " " : "", txn.resp[i]);
         cJSON_AddStringToObject(resp, "rxHex", hex);
 
-        /* Decode values */
         cJSON *vals = cJSON_CreateArray();
-        uint8_t *rd = txn.resp + 1;   /* skip unit_id in response */
+        uint8_t *rd = txn.resp + 1;
         uint8_t rfc = rd[0];
 
         if ((rfc == 3 || rfc == 4) && txn.resp_len > 3) {
@@ -237,6 +242,148 @@ static esp_err_t api_test(httpd_req_t *req)
     httpd_resp_sendstr(req, json);
     free(json);
     cJSON_Delete(resp);
+    return ESP_OK;
+}
+
+/* ───────────────────── GET /api/scan ───────────────────── */
+
+static esp_err_t api_scan(httpd_req_t *req)
+{
+    wifi_scan_config_t sc = { .show_hidden = false };
+    esp_err_t err = esp_wifi_scan_start(&sc, true);
+
+    if (err != ESP_OK) {
+        ESP_LOGI(TAG, "scan failed err=%d", err);
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, "{\"networks\":[]}");
+        return ESP_OK;
+    }
+
+    uint16_t n = 0;
+    esp_wifi_scan_get_ap_num(&n);
+    ESP_LOGI(TAG, "scan ok n=%d", n);
+    if (n > 20) n = 20;
+
+    wifi_ap_record_t *ap = calloc(n, sizeof(wifi_ap_record_t));
+    if (!ap) {
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, "{\"networks\":[]}");
+        return ESP_OK;
+    }
+    esp_wifi_scan_get_ap_records(&n, ap);
+
+    for (int i = 0; i < n - 1; i++)
+        for (int j = i + 1; j < n; j++)
+            if (ap[j].rssi > ap[i].rssi) {
+                wifi_ap_record_t tmp = ap[i]; ap[i] = ap[j]; ap[j] = tmp;
+            }
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON *arr  = cJSON_CreateArray();
+    for (int i = 0; i < n; i++) {
+        cJSON *net = cJSON_CreateObject();
+        cJSON_AddStringToObject(net, "ssid", (char *)ap[i].ssid);
+        cJSON_AddNumberToObject(net, "rssi", ap[i].rssi);
+        cJSON_AddNumberToObject(net, "auth", ap[i].authmode);
+        cJSON_AddItemToArray(arr, net);
+    }
+    cJSON_AddItemToObject(root, "networks", arr);
+
+    char *json = cJSON_PrintUnformatted(root);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, json);
+    free(json);
+    cJSON_Delete(root);
+    free(ap);
+    return ESP_OK;
+}
+
+/* ───────────────────── POST /api/ota/upload ───────────────────── */
+
+static esp_err_t api_ota_upload(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "OTA upload start, size=%d", req->content_len);
+
+    const esp_partition_t *update = esp_ota_get_next_update_partition(NULL);
+    if (!update) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No OTA partition");
+        return ESP_FAIL;
+    }
+
+    esp_ota_handle_t handle;
+    esp_err_t err = esp_ota_begin(update, OTA_WITH_SEQUENTIAL_WRITES, &handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "ota_begin failed: %s", esp_err_to_name(err));
+        char e[64];
+        snprintf(e, sizeof(e), "{\"error\":\"%s\"}", esp_err_to_name(err));
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, e);
+        return ESP_OK;
+    }
+
+    int remaining = req->content_len;
+    char buf[1024];
+    while (remaining > 0) {
+        int toread = remaining < (int)sizeof(buf) ? remaining : (int)sizeof(buf);
+        int recv_len = httpd_req_recv(req, buf, toread);
+        if (recv_len <= 0) {
+            ESP_LOGE(TAG, "OTA recv failed");
+            esp_ota_abort(handle);
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "recv failed");
+            return ESP_FAIL;
+        }
+        err = esp_ota_write(handle, buf, recv_len);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "ota_write failed: %s", esp_err_to_name(err));
+            esp_ota_abort(handle);
+            char e[64];
+            snprintf(e, sizeof(e), "{\"error\":\"%s\"}", esp_err_to_name(err));
+            httpd_resp_set_type(req, "application/json");
+            httpd_resp_sendstr(req, e);
+            return ESP_OK;
+        }
+        remaining -= recv_len;
+    }
+
+    err = esp_ota_end(handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "ota_end failed: %s", esp_err_to_name(err));
+        char e[64];
+        snprintf(e, sizeof(e), "{\"error\":\"%s\"}", esp_err_to_name(err));
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, e);
+        return ESP_OK;
+    }
+
+    err = esp_ota_set_boot_partition(update);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "set_boot failed: %s", esp_err_to_name(err));
+        char e[64];
+        snprintf(e, sizeof(e), "{\"error\":\"%s\"}", esp_err_to_name(err));
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, e);
+        return ESP_OK;
+    }
+
+    ESP_LOGI(TAG, "OTA success — rebooting");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"status\":\"rebooting\"}");
+    vTaskDelay(pdMS_TO_TICKS(500));
+    esp_restart();
+    return ESP_OK;
+}
+
+/* ───────────────────── GET /api/ota/check ───────────────────── */
+
+static esp_err_t api_ota_check(httpd_req_t *req)
+{
+    char json[256];
+    snprintf(json, sizeof(json),
+        "{\"current\":\"%s\",\"available\":\"%s\","
+        "\"url\":\"https://fieldtunnel.com/firmware/latest.json\"}",
+        FW_VERSION, FW_VERSION);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, json);
     return ESP_OK;
 }
 
@@ -283,8 +430,9 @@ void http_server_task(void *arg)
 
     /* HTTP server */
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
-    cfg.max_uri_handlers = 16;
-    cfg.stack_size = 8192;
+    cfg.max_uri_handlers = 20;
+    cfg.stack_size = 10240;
+    cfg.recv_wait_timeout = 30;
     httpd_handle_t srv = NULL;
     if (httpd_start(&srv, &cfg) != ESP_OK) {
         ESP_LOGE(TAG, "httpd_start failed");
@@ -304,10 +452,13 @@ void http_server_task(void *arg)
         { "/api/test",       HTTP_POST, api_test,       NULL },
         { "/api/reboot",     HTTP_POST, api_reboot,     NULL },
         { "/api/resetstats", HTTP_POST, api_resetstats, NULL },
+        { "/api/scan",       HTTP_GET,  api_scan,       NULL },
+        { "/api/ota/upload", HTTP_POST, api_ota_upload, NULL },
+        { "/api/ota/check",  HTTP_GET,  api_ota_check,  NULL },
     };
     for (int i = 0; i < sizeof(uris) / sizeof(uris[0]); i++)
         httpd_register_uri_handler(srv, &uris[i]);
 
-    ESP_LOGI(TAG, "HTTP server on port 80");
+    ESP_LOGI(TAG, "HTTP server on port 80 (%d endpoints)", (int)(sizeof(uris)/sizeof(uris[0])));
     while (1) { vTaskDelay(pdMS_TO_TICKS(60000)); }
 }

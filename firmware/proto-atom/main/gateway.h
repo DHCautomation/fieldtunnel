@@ -18,9 +18,9 @@
 #define DEFAULT_STOP_BITS  1
 #define DEFAULT_RTU_TMO    500        /* ms */
 #define DEFAULT_TCP_PORT   502
-#define AP_SSID            "FieldTunnel-Setup"
 #define AP_PASS            "fieldtunnel123"
-#define FW_VERSION         "0.1.0"
+#define FW_VERSION         "0.2.0"
+#define AP_IP              "192.168.4.1"
 
 /* ── Sizes ── */
 #define MAX_PDU   253
@@ -37,7 +37,12 @@ typedef struct {
     char     wifi_pass[65];
     bool     wifi_connected;
     bool     ap_mode;
+    bool     nat_enabled;
     char     ip_addr[16];
+    char     sta_ip[16];
+    char     device_id[8];
+    char     ap_ssid[32];
+    char     hostname[32];
 
     uint32_t baud;
     uint8_t  data_bits;
@@ -45,6 +50,7 @@ typedef struct {
     uint8_t  stop_bits;
     uint16_t rtu_timeout;
     uint16_t tcp_port;
+    uint8_t  mode;         /* 0=Modbus TCP GW  1=Raw Tunnel */
 
     uint32_t tx_count;
     uint32_t rx_count;

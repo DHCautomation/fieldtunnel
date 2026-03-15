@@ -2,12 +2,56 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "lwip/sockets.h"
+#include "driver/uart.h"
 #include "esp_log.h"
 #include "gateway.h"
 
 static const char *TAG = "tcp";
 
-static void handle_client(int sock)
+/* ── Raw TCP Tunnel: bidirectional byte pipe ── */
+static void handle_raw_client(int sock)
+{
+    uint8_t buf[256];
+
+    /* Make socket non-blocking for select() */
+    int flags = fcntl(sock, F_GETFL, 0);
+    fcntl(sock, F_SETFL, flags | O_NONBLOCK);
+
+    ESP_LOGI(TAG, "Raw tunnel active");
+
+    while (1) {
+        fd_set rfds;
+        FD_ZERO(&rfds);
+        FD_SET(sock, &rfds);
+        struct timeval tv = { .tv_sec = 0, .tv_usec = 100000 }; /* 100 ms */
+
+        int sel = select(sock + 1, &rfds, NULL, NULL, &tv);
+
+        /* sock → RS485 */
+        if (sel > 0 && FD_ISSET(sock, &rfds)) {
+            int n = recv(sock, buf, sizeof(buf), 0);
+            if (n <= 0) break;                        /* client gone */
+            uart_write_bytes(RS485_UART, buf, n);
+            uart_wait_tx_done(RS485_UART, pdMS_TO_TICKS(500));
+            gw.tx_count++;
+        }
+
+        /* RS485 → sock */
+        int avail = 0;
+        uart_get_buffered_data_len(RS485_UART, (size_t *)&avail);
+        if (avail > 0) {
+            if (avail > (int)sizeof(buf)) avail = sizeof(buf);
+            int n = uart_read_bytes(RS485_UART, buf, avail, 0);
+            if (n > 0) {
+                if (send(sock, buf, n, 0) <= 0) break;
+                gw.rx_count++;
+            }
+        }
+    }
+}
+
+/* ── Modbus TCP Gateway ── */
+static void handle_modbus_client(int sock)
 {
     uint8_t mbap[MBAP_LEN];
 
@@ -88,7 +132,10 @@ void tcp_server_task(void *arg)
         struct timeval tv = { .tv_sec = 60 };
         setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
-        handle_client(client);
+        if (gw.mode == 1)
+            handle_raw_client(client);
+        else
+            handle_modbus_client(client);
         close(client);
         ESP_LOGI(TAG, "-client");
     }

@@ -1,4 +1,5 @@
 #include <string.h>
+#include <ctype.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -34,6 +35,7 @@ void gw_load_config(void)
     uint16_t u16;
     if (nvs_get_u16(h, "tmo",  &u16) == ESP_OK) gw.rtu_timeout = u16;
     if (nvs_get_u16(h, "port", &u16) == ESP_OK) gw.tcp_port    = u16;
+    if (nvs_get_u8(h, "mode",  &u8) == ESP_OK) gw.mode       = u8;
     nvs_close(h);
 }
 
@@ -49,6 +51,7 @@ void gw_save_config(void)
     nvs_set_u8(h,  "stop",  gw.stop_bits);
     nvs_set_u16(h, "tmo",   gw.rtu_timeout);
     nvs_set_u16(h, "port",  gw.tcp_port);
+    nvs_set_u8(h,  "mode",  gw.mode);
     nvs_commit(h);
     nvs_close(h);
 }
@@ -63,7 +66,7 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
-    /* Network stack (once, before any task) */
+    /* Network stack */
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
@@ -77,25 +80,41 @@ void app_main(void)
     gw.stop_bits   = DEFAULT_STOP_BITS;
     gw.rtu_timeout = DEFAULT_RTU_TMO;
     gw.tcp_port    = DEFAULT_TCP_PORT;
+    gw.mode        = 0;
 
     gw_load_config();
 
-    /* MAC */
+    /* ── Device identity from MAC ── */
     uint8_t mac[6];
     esp_efuse_mac_get_default(mac);
     snprintf(gw.mac_addr, sizeof(gw.mac_addr),
              "%02X:%02X:%02X:%02X:%02X:%02X",
              mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
-    ESP_LOGI(TAG, "=== FieldTunnel v%s ===", FW_VERSION);
-    ESP_LOGI(TAG, "MAC: %s", gw.mac_addr);
+    /* Short ID from last 2 MAC bytes */
+    snprintf(gw.device_id, sizeof(gw.device_id), "%02X%02X", mac[4], mac[5]);
 
-    /* RTU request queue (pointer-sized items) */
+    /* Dynamic AP SSID */
+    snprintf(gw.ap_ssid, sizeof(gw.ap_ssid), "FieldTunnel-%s", gw.device_id);
+
+    /* Hostname (lowercase) */
+    snprintf(gw.hostname, sizeof(gw.hostname), "fieldtunnel-%02x%02x", mac[4], mac[5]);
+
+#ifdef CONFIG_LWIP_IPV4_NAPT
+    ESP_LOGI(TAG, "NAPT: compiled in");
+#else
+    ESP_LOGW(TAG, "NAPT: NOT compiled — check sdkconfig");
+#endif
+    ESP_LOGI(TAG, "=== FieldTunnel v%s ===", FW_VERSION);
+    ESP_LOGI(TAG, "ID: %s  MAC: %s", gw.device_id, gw.mac_addr);
+    ESP_LOGI(TAG, "AP SSID: %s  Host: %s", gw.ap_ssid, gw.hostname);
+
+    /* RTU request queue */
     rtu_queue = xQueueCreate(4, sizeof(rtu_txn_t *));
 
     /* FreeRTOS tasks */
     xTaskCreate(wifi_task,        "wifi",     4096, NULL, 5, NULL);
     xTaskCreate(rs485_task,       "rs485",    4096, NULL, 6, NULL);
     xTaskCreate(tcp_server_task,  "tcp_srv",  4096, NULL, 5, NULL);
-    xTaskCreate(http_server_task, "http_srv", 8192, NULL, 4, NULL);
+    xTaskCreate(http_server_task, "http_srv", 12288, NULL, 4, NULL);
 }
