@@ -104,14 +104,34 @@ function setActiveMode(m) {
     document.querySelectorAll('.mode-card').forEach(function(c) {
         c.classList.toggle('active', parseInt(c.dataset.mode) === m);
     });
+    /* Show/hide context-aware settings */
     var bs = document.getElementById('bacnet-settings');
-    if (bs) bs.style.display = (m === 2) ? 'block' : 'none';
+    var se = document.getElementById('serial-extras');
+    var bh = document.getElementById('baud-hint');
+    if (m === 2) {
+        if (se) se.style.display = 'none';
+        if (bs) bs.style.display = 'block';
+        if (bh) bh.style.display = 'block';
+    } else {
+        if (se) se.style.display = 'block';
+        if (bs) bs.style.display = 'none';
+        if (bh) bh.style.display = 'none';
+    }
 }
 
 function updateModeStatus(m, port, baud, db, par, sb) {
-    var frame = baud + ' ' + db + ['N','O','E'][par] + sb;
     var el = document.getElementById('mode-status');
-    if (el) el.textContent = 'Active: ' + MODE_NAMES[m] + ' \u00b7 port ' + port + ' \u00b7 ' + frame;
+    if (!el) return;
+    if (m === 2) {
+        var bmac = document.getElementById('cfg-bmac');
+        var bport = document.getElementById('cfg-bport');
+        el.textContent = 'Active: BACnet MS/TP \u00b7 MAC ' +
+            (bmac ? bmac.value : '5') + ' \u00b7 ' + baud +
+            ' \u00b7 UDP ' + (bport ? bport.value : '47808');
+    } else {
+        var frame = baud + ' ' + db + ['N','O','E'][par] + sb;
+        el.textContent = 'Active: ' + MODE_NAMES[m] + ' \u00b7 port ' + port + ' \u00b7 ' + frame;
+    }
 }
 
 function selectMode(m) {

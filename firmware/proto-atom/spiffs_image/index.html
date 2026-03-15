@@ -94,23 +94,32 @@
 
     <div class="card">
       <h3>Serial Settings</h3>
-      <div class="form-row">
-        <div class="form-group"><label>Baud Rate</label>
-          <select id="cfg-baud"><option>9600</option><option selected>19200</option><option>38400</option><option>57600</option><option>115200</option></select></div>
-        <div class="form-group"><label>Data Bits</label>
-          <select id="cfg-dbits"><option value="7">7</option><option value="8" selected>8</option></select></div>
+      <div id="baud-row">
+        <div class="form-row">
+          <div class="form-group"><label>Baud Rate</label>
+            <select id="cfg-baud"><option>9600</option><option selected>19200</option><option>38400</option><option>57600</option><option>115200</option></select></div>
+        </div>
+        <div id="baud-hint" style="display:none">
+          <p class="hint" style="margin-top:-4px;margin-bottom:12px">BACnet MS/TP requires 8N1 framing. Common baud rates: 9600 &middot; 19200 &middot; 38400 &middot; 76800</p>
+        </div>
       </div>
-      <div class="form-row">
-        <div class="form-group"><label>Parity</label>
-          <select id="cfg-par"><option value="0">None</option><option value="1">Odd</option><option value="2">Even</option></select></div>
-        <div class="form-group"><label>Stop Bits</label>
-          <select id="cfg-stop"><option value="1">1</option><option value="2">2</option></select></div>
-      </div>
-      <div class="form-row">
-        <div class="form-group"><label>RTU Timeout (ms)</label>
-          <input id="cfg-tmo" type="number" value="500" min="50" max="10000"></div>
-        <div class="form-group"><label>TCP Port</label>
-          <input id="cfg-port" type="number" value="502" min="1" max="65535"></div>
+      <div id="serial-extras">
+        <div class="form-row">
+          <div class="form-group"><label>Data Bits</label>
+            <select id="cfg-dbits"><option value="7">7</option><option value="8" selected>8</option></select></div>
+          <div class="form-group"><label>Parity</label>
+            <select id="cfg-par"><option value="0">None</option><option value="1">Odd</option><option value="2">Even</option></select></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Stop Bits</label>
+            <select id="cfg-stop"><option value="1">1</option><option value="2">2</option></select></div>
+          <div class="form-group"><label>RTU Timeout (ms)</label>
+            <input id="cfg-tmo" type="number" value="500" min="50" max="10000"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>TCP Port</label>
+            <input id="cfg-port" type="number" value="502" min="1" max="65535"></div>
+        </div>
       </div>
       <button onclick="saveRS485()">Apply</button>
     </div>
